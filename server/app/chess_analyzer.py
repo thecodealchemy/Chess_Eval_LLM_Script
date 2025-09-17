@@ -15,9 +15,11 @@ class ChessAnalyzer:
         
         # Initialize Groq client if API key is available
         groq_api_key = os.getenv("GROQ_API_KEY")
-        if groq_api_key and groq_api_key != "your_groq_api_key_here":
+        
+        # Check if API key exists and is not a placeholder
+        if groq_api_key and groq_api_key.strip() and not groq_api_key.strip().startswith("your_groq_api_key"):
             try:
-                self.groq_client = Groq(api_key=groq_api_key)
+                self.groq_client = Groq(api_key=groq_api_key.strip())
                 print("✓ Groq client initialized successfully")
             except Exception as e:
                 print(f"Warning: Failed to initialize Groq client: {e}")
@@ -119,103 +121,361 @@ class ChessAnalyzer:
         return analyses
     
     async def _get_position_evaluation(self, fen: str) -> dict:
-        """Get position evaluation from Lichess cloud eval"""
+        """Get position evaluation from Lichess cloud eval with robust error handling"""
         # Check cache first
         if fen in self.cache:
             return self.cache[fen]
             
+        # First, validate the FEN position
         try:
+            import chess
+            test_board = chess.Board(fen)
+            if test_board.is_game_over():
+                # Position is terminal (checkmate, stalemate, etc.)
+                result = self._handle_terminal_position(test_board)
+                self.cache[fen] = result
+                return result
+        except ValueError as e:
+            print(f"Invalid FEN: {fen} - {e}")
+            return {"eval": None, "best_move": None, "variations": [], "pvs": [], "error": "Invalid FEN"}
+            
+        try:
+            # Use similar parameters as CloudReviews.py
             response = requests.get(
                 self.lichess_api_base,
-                params={"fen": fen, "multiPv": 3},  # Request top 3 variations like CloudReviews.py
-                timeout=10
+                params={"fen": fen, "multiPv": 3, "depth": 15},
+                timeout=15
             )
             
             if response.status_code == 200:
                 data = response.json()
                 
-                # Parse multiple PVs based on CloudReviews.py approach
+                # Parse according to CloudReviews.py format
                 pvs = data.get("pvs", [])
                 variations = []
+                eval_score = None
+                best_move = None
                 
                 if pvs and len(pvs) > 0:
-                    # Process up to 3 variations from Lichess API
-                    for pv_data in pvs[:3]:
-                        # Handle both 'moves' and 'pv' fields from Lichess response
-                        pv_moves = None
-                        if "moves" in pv_data and pv_data["moves"]:
-                            pv_moves = pv_data["moves"]
-                        elif "pv" in pv_data and pv_data["pv"]:
-                            pv_moves = pv_data["pv"]
-                        
+                    # Get evaluation from first PV
+                    first_pv = pvs[0]
+                    
+                    # Handle mate scores
+                    if "mate" in first_pv and first_pv["mate"] is not None:
+                        mate_score = first_pv["mate"]
+                        eval_score = f"#{'+' if mate_score > 0 else ''}{mate_score}"
+                    # Handle centipawn scores
+                    elif "cp" in first_pv and first_pv["cp"] is not None:
+                        eval_score = first_pv["cp"] / 100.0
+                    
+                    # Extract variations from all PVs
+                    for i, pv_data in enumerate(pvs[:3]):
+                        pv_moves = self._extract_moves_from_pv(pv_data)
+                        print(f"PV {i+1}: extracted_moves={pv_moves}")
                         if pv_moves:
-                            # Ensure moves are space-separated string
-                            if isinstance(pv_moves, list):
-                                pv_moves = " ".join(str(m) for m in pv_moves)
-                            variations.append(str(pv_moves))
+                            variation_str = " ".join(pv_moves[:8])  # Limit to 8 moves
+                            variations.append(variation_str)
+                            print(f"Added variation {i+1}: {variation_str}")
+                    
+                    # Get best move from first variation
+                    if variations and variations[0]:
+                        best_move = variations[0].split()[0] if variations[0].split() else None
                 
-                # Fallback to single PV if no multi-PV available
-                if not variations and data.get("pv"):
-                    variations = [data.get("pv", "")]
-                
+                print(f"Lichess API success for {fen[:20]}...: found {len(pvs)} PVs, {len(variations)} variations")
                 result = {
-                    "eval": data.get("cp", 0) / 100.0 if data.get("cp") else None,
-                    "best_move": data.get("pv", "").split()[0] if data.get("pv") else None,
-                    "variations": variations
+                    "eval": eval_score,
+                    "best_move": best_move,
+                    "variations": variations,
+                    "pvs": pvs  # Keep raw PVs for detailed analysis
                 }
                 
                 # Cache the result
                 self.cache[fen] = result
                 return result
                 
+            elif response.status_code == 404:
+                # Position not found in Lichess database - provide fallback
+                print(f"Lichess API: Position not in database (404) - {fen[:20]}...")
+                fallback_result = self._provide_fallback_evaluation(fen)
+                self.cache[fen] = fallback_result
+                return fallback_result
+                
+            else:
+                print(f"Lichess API error: HTTP {response.status_code} for {fen[:20]}...")
+                
+        except requests.exceptions.Timeout:
+            print(f"Lichess API timeout for {fen[:20]}...")
+        except requests.exceptions.RequestException as e:
+            print(f"Lichess API connection error: {e.__class__.__name__}")
         except Exception as e:
-            print(f"Error getting evaluation for {fen}: {e}")
+            print(f"Error getting evaluation for {fen[:20]}...: {e}")
             
-        return {"eval": None, "best_move": None, "variations": []}
+        # Return fallback when API fails
+        fallback_result = self._provide_fallback_evaluation(fen)
+        self.cache[fen] = fallback_result
+        return fallback_result
+    
+    def _extract_moves_from_pv(self, pv_data: dict) -> List[str]:
+        """Extract UCI moves from PV data based on CloudReviews.py logic"""
+        moves = []
+        if not pv_data:
+            return moves
+            
+        # Try 'moves' field first
+        if "moves" in pv_data:
+            mv = pv_data["moves"]
+            if isinstance(mv, str):
+                moves = [m for m in mv.split() if m]
+            elif isinstance(mv, list):
+                for item in mv:
+                    if isinstance(item, str):
+                        moves.append(item)
+                    elif isinstance(item, dict):
+                        # dict may contain 'uci' or 'san'
+                        uci = item.get("uci") or item.get("move") or item.get("fromTo")
+                        if uci:
+                            moves.append(uci)
+        # Try 'pv' field as fallback
+        elif "pv" in pv_data and isinstance(pv_data["pv"], str):
+            moves = [m for m in pv_data["pv"].split() if m]
+            
+        # Filter out obviously wrong entries
+        moves = [m for m in moves if isinstance(m, str) and len(m) >= 4]
+        return moves
+    
+    def _handle_terminal_position(self, board) -> dict:
+        """Handle terminal positions (checkmate, stalemate, etc.)"""
+        if board.is_checkmate():
+            # Determine who is checkmated
+            if board.turn:  # White to move but checkmated
+                eval_score = "#-0"  # Black wins
+            else:  # Black to move but checkmated
+                eval_score = "#+0"  # White wins
+        elif board.is_stalemate() or board.is_insufficient_material() or board.is_seventyfive_moves() or board.is_fivefold_repetition():
+            eval_score = 0.0  # Draw
+        else:
+            eval_score = None
+            
+        return {
+            "eval": eval_score,
+            "best_move": None,
+            "variations": [],
+            "pvs": [],
+            "terminal": True
+        }
+    
+    def _provide_fallback_evaluation(self, fen: str) -> dict:
+        """Provide basic evaluation when Lichess API is unavailable"""
+        try:
+            import chess
+            board = chess.Board(fen)
+            
+            # Basic material count evaluation
+            material_balance = self._calculate_material_balance(board)
+            
+            # Simple positional factors
+            positional_score = self._calculate_basic_positional_score(board)
+            
+            # Combine for rough evaluation
+            total_eval = material_balance + positional_score
+            
+            # Generate basic "variations" by suggesting common good moves
+            basic_variations = self._generate_basic_move_suggestions(board)
+            
+            return {
+                "eval": round(total_eval, 2),
+                "best_move": basic_variations[0].split()[0] if basic_variations else None,
+                "variations": basic_variations,
+                "pvs": [],
+                "fallback": True,
+                "note": "Basic evaluation (Lichess cloud eval unavailable)"
+            }
+            
+        except Exception as e:
+            print(f"Error in fallback evaluation: {e}")
+            return {
+                "eval": 0.0,
+                "best_move": None,
+                "variations": ["No analysis available"],
+                "pvs": [],
+                "fallback": True,
+                "error": "Evaluation unavailable"
+            }
+    
+    def _calculate_material_balance(self, board) -> float:
+        """Calculate material balance in pawns"""
+        piece_values = {
+            chess.PAWN: 1.0,
+            chess.KNIGHT: 3.0,
+            chess.BISHOP: 3.0,
+            chess.ROOK: 5.0,
+            chess.QUEEN: 9.0,
+            chess.KING: 0.0
+        }
+        
+        white_material = 0
+        black_material = 0
+        
+        for square in chess.SQUARES:
+            piece = board.piece_at(square)
+            if piece:
+                value = piece_values.get(piece.piece_type, 0)
+                if piece.color == chess.WHITE:
+                    white_material += value
+                else:
+                    black_material += value
+                    
+        return white_material - black_material
+    
+    def _calculate_basic_positional_score(self, board) -> float:
+        """Calculate basic positional factors"""
+        score = 0.0
+        
+        # Center control (very basic)
+        center_squares = [chess.E4, chess.E5, chess.D4, chess.D5]
+        for square in center_squares:
+            piece = board.piece_at(square)
+            if piece:
+                if piece.color == chess.WHITE:
+                    score += 0.1
+                else:
+                    score -= 0.1
+        
+        # King safety (very basic - penalize exposed king)
+        white_king_square = board.king(chess.WHITE)
+        black_king_square = board.king(chess.BLACK)
+        
+        if white_king_square and board.is_attacked_by(chess.BLACK, white_king_square):
+            score -= 0.2
+        if black_king_square and board.is_attacked_by(chess.WHITE, black_king_square):
+            score += 0.2
+            
+        return score
+    
+    def _generate_basic_move_suggestions(self, board) -> List[str]:
+        """Generate basic move suggestions when engine analysis is unavailable"""
+        import chess
+        suggestions = []
+        
+        try:
+            legal_moves = list(board.legal_moves)
+            if not legal_moves:
+                return ["No legal moves"]
+            
+            # Prioritize captures, checks, and central moves
+            good_moves = []
+            
+            for move in legal_moves[:20]:  # Limit to first 20 moves for performance
+                move_san = board.san(move)
+                
+                # Prioritize captures
+                if board.is_capture(move):
+                    good_moves.append((move_san, 3))
+                # Prioritize checks
+                elif board.gives_check(move):
+                    good_moves.append((move_san, 2))
+                # Prioritize central moves
+                elif move.to_square in [chess.E4, chess.E5, chess.D4, chess.D5]:
+                    good_moves.append((move_san, 1))
+                else:
+                    good_moves.append((move_san, 0))
+            
+            # Sort by priority and take top 3
+            good_moves.sort(key=lambda x: x[1], reverse=True)
+            top_moves = [move[0] for move in good_moves[:3]]
+            
+            # Format as variation strings
+            for i, move in enumerate(top_moves):
+                if i == 0:
+                    suggestions.append(f"{move} (capture/check priority)")
+                elif i == 1:
+                    suggestions.append(f"{move} (tactical option)")
+                else:
+                    suggestions.append(f"{move} (alternative)")
+            
+            return suggestions if suggestions else ["Analysis limited"]
+            
+        except Exception as e:
+            print(f"Error generating move suggestions: {e}")
+            return ["Basic analysis available"]
     
     async def _get_llm_explanation(self, fen: str, move_number: int, evaluation: dict) -> Optional[str]:
-        """Get LLM explanation for a position (placeholder - integrate with Groq/OpenAI)"""
-        # This is a placeholder - you can integrate with Groq or OpenAI here
-        # For now, return a simple explanation based on evaluation
+        """Get LLM explanation for a position (fallback method)"""
         eval_score = evaluation.get("eval")
+        best_move = evaluation.get("best_move", "")
+        variations = evaluation.get("variations", [])
+        is_fallback = evaluation.get("fallback", False)
+        is_terminal = evaluation.get("terminal", False)
+        
+        # Handle terminal positions
+        if is_terminal:
+            if isinstance(eval_score, str) and "#" in eval_score:
+                return "Checkmate position reached."
+            else:
+                return "Game ended in a draw (stalemate, insufficient material, or repetition)."
         
         # Handle None evaluation
         if eval_score is None:
-            return f"Move {move_number}: Position evaluation unavailable"
+            return f"Position analysis unavailable. Engine unable to evaluate this position."
+        
+        # Handle mate scores
+        if isinstance(eval_score, str) and eval_score.startswith("#"):
+            mate_num = eval_score[1:] if eval_score[1:].isdigit() else eval_score[2:]
+            return f"Mate in {mate_num} moves detected! The position shows a forced checkmate sequence."
         
         # Ensure eval_score is a number before comparison
         try:
             eval_score = float(eval_score)
         except (TypeError, ValueError):
-            return f"Move {move_number}: Position evaluation unavailable"
+            return f"Position evaluation unavailable due to analysis error."
         
+        # Build explanation based on evaluation
         if eval_score > 2:
-            return f"Move {move_number}: White has a significant advantage (+{eval_score:.1f})"
+            explanation = f"White has a significant advantage (+{eval_score:.1f}). "
         elif eval_score < -2:
-            return f"Move {move_number}: Black has a significant advantage ({eval_score:.1f})"
+            explanation = f"Black has a significant advantage ({eval_score:.1f}). "
         elif eval_score > 0.5:
-            return f"Move {move_number}: White is slightly better (+{eval_score:.1f})"
+            explanation = f"White is slightly better (+{eval_score:.1f}). "
         elif eval_score < -0.5:
-            return f"Move {move_number}: Black is slightly better ({eval_score:.1f})"
+            explanation = f"Black is slightly better ({eval_score:.1f}). "
         else:
-            return f"Move {move_number}: Position is roughly equal ({eval_score:.1f})"
+            explanation = f"Position is roughly equal ({eval_score:.1f}). "
+        
+        # Add best move info if available
+        if best_move:
+            explanation += f"Best move: {best_move}."
+        
+        # Add appropriate note based on evaluation source
+        if is_fallback:
+            explanation += " (Basic analysis - cloud evaluation unavailable)"
+        else:
+            explanation += " (Enable GROQ_API_KEY for detailed AI analysis)"
+        
+        return explanation
     
-    async def analyze_single_move(self, game_id: str, move_index: int, position_fen: str) -> dict:
+    async def analyze_single_move(self, game_id: str, move_index: int, position_fen: str, played_move: Optional[str] = None) -> dict:
         """Analyze a single move using Lichess API and Groq LLM"""
-        # Get position evaluation from Lichess
+        # Get position evaluation from Lichess (this should be the position BEFORE the move)
         evaluation = await self._get_position_evaluation(position_fen)
         
-        # Get LLM explanation
-        explanation = await self._get_groq_explanation(position_fen, move_index, evaluation)
+        # Get LLM explanation with played move context
+        explanation = await self._get_groq_explanation(position_fen, move_index, evaluation, played_move)
         
         return {
             "eval": evaluation.get("eval"),
             "explanation": explanation,
-            "variations": evaluation.get("variations", [])
+            "variations": evaluation.get("variations", []),
+            "played_best": self._check_if_best_move(played_move, evaluation.get("best_move"))
         }
     
-    async def _get_groq_explanation(self, fen: str, move_index: int, evaluation: dict) -> Optional[str]:
-        """Get move explanation from Groq LLM"""
+    def _check_if_best_move(self, played_move: Optional[str], best_move: Optional[str]) -> bool:
+        """Check if the played move matches the best move"""
+        if not played_move or not best_move:
+            return False
+        return played_move.lower() == best_move.lower()
+
+    async def _get_groq_explanation(self, fen: str, move_index: int, evaluation: dict, played_move: Optional[str] = None) -> Optional[str]:
+        """Get move explanation from Groq LLM with better analysis and fallback handling"""
         if not self.groq_client:
             # Fallback to simple explanation if Groq is not available
             fallback_explanation = await self._get_llm_explanation(fen, move_index, evaluation)
@@ -224,32 +484,77 @@ class ChessAnalyzer:
         try:
             eval_score = evaluation.get("eval")
             best_move = evaluation.get("best_move", "")
+            variations = evaluation.get("variations", [])
+            is_fallback = evaluation.get("fallback", False)
+            is_terminal = evaluation.get("terminal", False)
+            
+            # Handle terminal positions
+            if is_terminal:
+                return "Game over position - no further analysis needed."
             
             # Handle None evaluation
             if eval_score is None:
                 eval_score = 0.0
+                eval_str = "N/A"
+            elif isinstance(eval_score, str) and eval_score.startswith("#"):
+                eval_str = eval_score  # Mate score
+            else:
+                # Ensure eval_score is a number
+                try:
+                    eval_score = float(eval_score)
+                    eval_str = f"{eval_score:+.2f}"
+                except (TypeError, ValueError):
+                    eval_score = 0.0
+                    eval_str = "N/A"
             
-            # Ensure eval_score is a number
-            try:
-                eval_score = float(eval_score)
-            except (TypeError, ValueError):
-                eval_score = 0.0
+            # Determine if played move was best
+            played_best = False
+            if played_move and best_move:
+                played_best = played_move.lower() == best_move.lower()
             
-            prompt = f"""
-You are a chess expert. Analyze this position and provide a brief explanation (2-3 sentences max).
+            # Build variation info for context - improved for fallback scenarios
+            variation_context = ""
+            analysis_source = ""
+            
+            if variations and not is_fallback:
+                # Real Lichess engine variations
+                top_variation = variations[0].split()[:4]  # First 4 moves
+                variation_context = f"Engine best line: {' '.join(top_variation)}"
+                analysis_source = "Lichess engine analysis"
+            elif variations and is_fallback:
+                # Basic move suggestions from fallback
+                variation_context = f"Suggested moves: {', '.join(variations[:2])}"
+                analysis_source = "Basic position analysis"
+            elif is_fallback:
+                variation_context = "Cloud evaluation unavailable - using basic analysis"
+                analysis_source = "Basic material/positional analysis"
+            else:
+                variation_context = "No engine lines available"
+                analysis_source = "Limited analysis"
+            
+            # Adjust prompt based on evaluation source with more detailed context
+            if is_fallback:
+                prompt = f"""Chess position analysis using basic evaluation (≤40 words):
 
-Position FEN: {fen}
-Move number: {move_index}
-Engine evaluation: {eval_score:.2f} (positive = White advantage, negative = Black advantage)
-Best move: {best_move}
+Move {move_index}: {played_move or 'Unknown'}
+Material evaluation: {eval_str}
+{variation_context}
+Source: {analysis_source}
 
-Provide a concise explanation focusing on:
-1. What the evaluation means
-2. Key tactical or positional factors
-3. The significance of the best move if applicable
+Analyze: 1) Material balance, 2) Basic tactical/positional factors, 3) General move assessment."""
+            else:
+                prompt = f"""Chess expert analysis with engine data (≤40 words):
 
-Keep it under 150 characters for brevity.
-"""
+Position: {fen}
+Move {move_index}: {played_move or 'Unknown'}
+Engine evaluation: {eval_str}
+Played best move: {'YES' if played_best else 'NO'}
+{variation_context}
+Source: {analysis_source}
+
+Explain: 1) What this evaluation means, 2) Key factors, 3) Better alternatives if applicable."""
+            
+            print(f"LLM prompt for move {move_index}: {prompt[:100]}...")  # Debug log
             
             response = self.groq_client.chat.completions.create(
                 messages=[
@@ -258,19 +563,28 @@ Keep it under 150 characters for brevity.
                         "content": prompt
                     }
                 ],
-                model="llama3-8b-8192",  # Using Llama 3 8B model
-                max_tokens=100,
-                temperature=0.3
+                model="llama-3.1-8b-instant",  # Updated to current model
+                max_tokens=80,  # Reduced for conciseness
+                temperature=0.2  # Lower temperature for more consistent analysis
             )
             
             response_content = response.choices[0].message.content
+            
+            # Add note about evaluation source if using fallback with more context
+            if is_fallback and response_content:
+                if "Basic analysis" not in response_content:
+                    response_content += f" [Source: {analysis_source}]"
+            elif not is_fallback and response_content:
+                if "Engine analysis" not in response_content:
+                    response_content += f" [Source: {analysis_source}]"
+            
             return response_content.strip() if response_content else "Analysis unavailable"
             
         except Exception as e:
             print(f"Error getting Groq explanation: {e}")
             # Fallback to simple explanation
             return await self._get_llm_explanation(fen, move_index, evaluation)
-    
+
     def extract_game_info(self, pgn_content: str) -> dict:
         """Extract game metadata from PGN"""
         try:

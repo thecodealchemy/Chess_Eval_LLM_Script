@@ -34,73 +34,53 @@ const GameListPage = () => {
   };
 
   if (isLoading) {
-    return <div className="loading">Loading games...</div>;
+    return (
+      <div className="loading">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mb-4"></div>
+        <div>Loading games...</div>
+      </div>
+    );
   }
 
   if (error) {
     return (
-      <div className="error">
-        Error loading games: {error.response?.data?.detail || error.message}
+      <div className="card">
+        <div className="error">
+          <div className="flex items-center mb-2">
+            <Info size={20} className="mr-2" />
+            <strong>Error Loading Games</strong>
+          </div>
+          <p>{error.response?.data?.detail || error.message}</p>
+        </div>
       </div>
     );
   }
 
   return (
     <div>
-      {!isAuthenticated && (
-        <div className="card info-card">
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              marginBottom: "12px",
-            }}
-          >
-            <Info size={20} className="mr-2" />
-            <h3 style={{ margin: 0 }}>Viewing All Games</h3>
-          </div>
-          <p style={{ margin: "0 0 12px 0" }}>
-            You're viewing all games from all users. Sign in to see only your
-            games and manage them.
-          </p>
-          <button
-            onClick={() => setShowLoginModal(true)}
-            className="btn btn-primary"
-            style={{ display: "flex", alignItems: "center" }}
-          >
-            <LogIn size={16} style={{ marginRight: "6px" }} />
-            Sign In to Manage Your Games
-          </button>
-        </div>
-      )}
-
       <div className="card">
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <h1>{isAuthenticated ? "Your Chess Games" : "All Chess Games"}</h1>
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+              {isAuthenticated ? "Your Chess Games" : "All Chess Games"}
+            </h1>
+            <p className="text-muted mt-1">
+              {isAuthenticated
+                ? "Manage and analyze your uploaded chess games."
+                : "Browse and analyze chess games from all users."}
+            </p>
+          </div>
           <Link to="/" className="btn btn-primary">
             Upload New Game
           </Link>
         </div>
-        <p>
-          {isAuthenticated
-            ? "Manage and analyze your uploaded chess games."
-            : "Browse and analyze chess games from all users."}
-        </p>
       </div>
 
       {games && games.length === 0 ? (
         <div className="card">
-          <div style={{ textAlign: "center", padding: "40px" }}>
-            <p
-              className="text-muted"
-              style={{ fontSize: "18px", marginBottom: "20px" }}
-            >
+          <div className="text-center py-12">
+            <div className="text-6xl mb-4">🏆</div>
+            <p className="text-muted text-lg mb-6">
               No games uploaded yet.
             </p>
             <Link to="/" className="btn btn-primary">
@@ -110,112 +90,139 @@ const GameListPage = () => {
         </div>
       ) : (
         <div className="card">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Title</th>
-                <th>Players</th>
-                <th>Result</th>
-                <th>Date</th>
-                <th>Moves</th>
-                <th>Uploaded</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {games?.map((game) => (
-                <tr key={game.id}>
-                  <td>
-                    <strong>{game.title}</strong>
-                    {game.event && (
-                      <div className="text-muted" style={{ fontSize: "12px" }}>
-                        {game.event}
-                      </div>
-                    )}
-                  </td>
-                  <td>
-                    <div style={{ display: "flex", alignItems: "center" }}>
-                      <Users size={14} style={{ marginRight: "4px" }} />
-                      <div>
-                        <div>{game.white_player || "Unknown"}</div>
-                        <div style={{ fontSize: "12px", color: "#666" }}>
+          <div className="games-grid">
+            {games?.map((game) => {
+              const getResultIcon = (result) => {
+                switch (result) {
+                  case "1-0":
+                    return "🏆";
+                  case "0-1":
+                    return "🥈";
+                  case "1/2-1/2":
+                    return "🤝";
+                  default:
+                    return "❓";
+                }
+              };
+
+              const getResultClasses = (result) => {
+                switch (result) {
+                  case "1-0":
+                    return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
+                  case "0-1":
+                    return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
+                  case "1/2-1/2":
+                    return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400";
+                  default:
+                    return "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-400";
+                }
+              };
+
+              return (
+                <div
+                  key={game.id}
+                  className="game-card transition-all duration-200 hover:shadow-lg hover:-translate-y-1"
+                >
+                  {/* Game Header */}
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
+                      {game.title || `Game ${game.id.slice(-6)}`}
+                    </h3>
+                    <div
+                      className={`flex items-center px-2 py-1 rounded-full text-xs font-medium ${getResultClasses(
+                        game.result
+                      )}`}
+                    >
+                      <span className="mr-1">{getResultIcon(game.result)}</span>
+                      {game.result || "Unknown"}
+                    </div>
+                  </div>
+
+                  {game.event && (
+                    <div className="text-muted text-sm mb-3 flex items-center">
+                      <span className="mr-1">📍</span>
+                      {game.event}
+                    </div>
+                  )}
+
+                  {/* Players */}
+                  <div className="mb-4">
+                    <div className="flex items-center text-sm">
+                      <Users size={14} className="text-muted mr-2" />
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-900 dark:text-white">
+                          {game.white_player || "Unknown"}
+                        </div>
+                        <div className="text-muted text-xs">
                           vs {game.black_player || "Unknown"}
                         </div>
                       </div>
                     </div>
-                  </td>
-                  <td>
-                    <span
-                      style={{
-                        padding: "2px 8px",
-                        borderRadius: "12px",
-                        fontSize: "12px",
-                        backgroundColor:
-                          game.result === "1-0"
-                            ? "#d4edda"
-                            : game.result === "0-1"
-                            ? "#f8d7da"
-                            : game.result === "1/2-1/2"
-                            ? "#fff3cd"
-                            : "#e2e3e5",
-                        color:
-                          game.result === "1-0"
-                            ? "#155724"
-                            : game.result === "0-1"
-                            ? "#721c24"
-                            : game.result === "1/2-1/2"
-                            ? "#856404"
-                            : "#6c757d",
-                      }}
-                    >
-                      {game.result || "Unknown"}
-                    </span>
-                  </td>
-                  <td>
-                    {game.date_played ? (
-                      <div style={{ display: "flex", alignItems: "center" }}>
-                        <Calendar size={14} style={{ marginRight: "4px" }} />
-                        {game.date_played}
-                      </div>
-                    ) : (
-                      "-"
-                    )}
-                  </td>
-                  <td>{game.move_count || "-"}</td>
-                  <td>{new Date(game.upload_date).toLocaleDateString()}</td>
-                  <td>
-                    <div style={{ display: "flex", gap: "8px" }}>
-                      <Link
-                        to={`/games/${game.id}`}
-                        className="btn btn-primary"
-                        style={{ padding: "4px 8px", fontSize: "12px" }}
-                      >
-                        <Eye size={14} />
-                      </Link>
-                      {isAuthenticated && (
-                        <button
-                          onClick={() => handleDelete(game.id, game.title)}
-                          className="btn btn-danger"
-                          style={{ padding: "4px 8px", fontSize: "12px" }}
-                          disabled={deleteMutation.isPending}
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                  </div>
+
+                  {/* Game Info */}
+                  <div className="grid grid-cols-2 gap-4 text-xs text-muted mb-4">
+                    <div>
+                      {game.date_played && (
+                        <div className="flex items-center">
+                          <Calendar size={12} className="mr-1" />
+                          {game.date_played}
+                        </div>
                       )}
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <div>
+                      {game.move_count && (
+                        <div className="flex items-center">
+                          <span className="mr-1">⚡</span>
+                          {game.move_count} moves
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-muted mb-4">
+                    Uploaded: {new Date(game.upload_date).toLocaleDateString()}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex gap-2 pt-3 border-t border-gray-200 dark:border-gray-700">
+                    <Link
+                      to={`/games/${game.id}`}
+                      className="btn btn-primary flex-1 justify-center text-sm py-2"
+                    >
+                      <Eye size={14} className="mr-1" />
+                      Analyze
+                    </Link>
+                    {isAuthenticated && (
+                      <button
+                        onClick={() => handleDelete(game.id, game.title)}
+                        className="btn btn-danger px-3 py-2"
+                        disabled={deleteMutation.isPending}
+                        title="Delete game"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
       {deleteMutation.error && (
-        <div className="error">
-          Error deleting game:{" "}
-          {deleteMutation.error.response?.data?.detail ||
-            deleteMutation.error.message}
+        <div className="card">
+          <div className="error">
+            <div className="flex items-center mb-2">
+              <Trash2 size={20} className="mr-2" />
+              <strong>Error Deleting Game</strong>
+            </div>
+            <p>
+              {deleteMutation.error.response?.data?.detail ||
+                deleteMutation.error.message}
+            </p>
+          </div>
         </div>
       )}
 

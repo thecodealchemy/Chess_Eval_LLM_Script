@@ -29,6 +29,7 @@ const GameDetailPage = () => {
   );
   const [moveAnalysis, setMoveAnalysis] = useState(null);
   const [analyzingMove, setAnalyzingMove] = useState(null);
+  const [moveArrows, setMoveArrows] = useState([]);
 
   // Auto-analysis toggles - enabled by default
   const [autoAnalysisEnabled, setAutoAnalysisEnabled] = useState(true);
@@ -60,12 +61,15 @@ const GameDetailPage = () => {
       gamesApi.analyzeMove(gameId, moveIndex),
     onSuccess: (data, variables) => {
       // Ensure data has the expected structure
+      console.log("Move analysis response:", data); // Debug log
       if (data && typeof data === "object") {
-        setMoveAnalysis({
+        const analysisData = {
           eval: data.eval ?? null,
           explanation: data.explanation ?? null,
           variations: Array.isArray(data.variations) ? data.variations : [],
-        });
+        };
+        console.log("Setting move analysis:", analysisData); // Debug log
+        setMoveAnalysis(analysisData);
       } else {
         console.warn("Unexpected analysis data structure:", data);
         setMoveAnalysis(null);
@@ -120,6 +124,20 @@ const GameDetailPage = () => {
         chess.move(moves[i]);
       }
       setCurrentPosition(chess.fen());
+
+      // Calculate arrow for current move
+      const arrows = [];
+      if (currentMoveIndex > 0 && moves[currentMoveIndex - 1]) {
+        const currentMove = moves[currentMoveIndex - 1];
+        console.log("Current move for arrow:", currentMove); // Debug log
+        arrows.push([
+          currentMove.from,
+          currentMove.to,
+          "rgb(255, 170, 0)", // Orange color for current move
+        ]);
+      }
+      console.log("Setting move arrows:", arrows); // Debug log
+      setMoveArrows(arrows);
     }
   }, [currentMoveIndex, moves, chess]);
 
@@ -128,24 +146,28 @@ const GameDetailPage = () => {
     setCurrentMoveIndex(newIndex);
     // Clear previous move analysis when navigating
     setMoveAnalysis(null);
-  };
 
-  const handleMoveClick = async (moveIndex) => {
-    // Navigate to the move first
-    goToMove(moveIndex);
+    // Clear arrows if going to starting position
+    if (newIndex === 0) {
+      setMoveArrows([]);
+    }
 
-    // Then analyze the move if auto-analysis is enabled
-    if (gameId && moveIndex > 0 && autoAnalysisEnabled) {
-      // Don't analyze starting position
-      setAnalyzingMove(moveIndex);
+    // Trigger analysis if auto-analysis is enabled and not at starting position
+    if (gameId && newIndex > 0 && autoAnalysisEnabled) {
+      setAnalyzingMove(newIndex);
       setMoveAnalysis(null);
       try {
-        moveAnalysisMutation.mutate({ gameId, moveIndex });
+        moveAnalysisMutation.mutate({ gameId, moveIndex: newIndex });
       } catch (error) {
         console.error("Error triggering move analysis:", error);
         setAnalyzingMove(null);
       }
     }
+  };
+
+  const handleMoveClick = async (moveIndex) => {
+    // Navigate to the move - analysis will be triggered automatically by goToMove
+    goToMove(moveIndex);
   };
 
   // Mutation for limited position analysis
@@ -214,6 +236,14 @@ const GameDetailPage = () => {
       tempChess.move(moves[i]);
     }
     setCurrentPosition(tempChess.fen());
+
+    // Restore main game arrows
+    const arrows = [];
+    if (currentMoveIndex > 0 && moves[currentMoveIndex - 1]) {
+      const currentMove = moves[currentMoveIndex - 1];
+      arrows.push([currentMove.from, currentMove.to, "rgb(255, 170, 0)"]);
+    }
+    setMoveArrows(arrows);
   };
 
   const goToVariationMove = (variationMoveIdx) => {
@@ -225,10 +255,16 @@ const GameDetailPage = () => {
 
     if (variationMoveIdx === 0) {
       setCurrentPosition(variationStartFen);
+      setMoveArrows([]); // Clear arrows at start of variation
     } else {
       const variationMove = variationAnalysis[variationMoveIdx - 1];
       if (variationMove) {
         setCurrentPosition(variationMove.fen);
+
+        // Add arrow for variation move
+        // Note: This would require the variation analysis to include move details
+        // For now, we'll clear arrows during variation exploration
+        setMoveArrows([]);
       }
     }
   };
@@ -309,6 +345,19 @@ const GameDetailPage = () => {
                 position={currentPosition}
                 arePiecesDraggable={false}
                 boardWidth={560}
+                arrows={moveArrows}
+                customSquareStyles={{
+                  ...(currentMoveIndex > 0 && moves[currentMoveIndex - 1]
+                    ? {
+                        [moves[currentMoveIndex - 1].from]: {
+                          backgroundColor: "rgba(255, 255, 0, 0.4)",
+                        },
+                        [moves[currentMoveIndex - 1].to]: {
+                          backgroundColor: "rgba(255, 255, 0, 0.4)",
+                        },
+                      }
+                    : {}),
+                }}
               />
 
               {/* Move Navigation */}
@@ -417,47 +466,56 @@ const GameDetailPage = () => {
               </div>
 
               {moveAnalysis?.eval != null && (
-                <div style={{ marginBottom: "20px" }}>
-                  <div
-                    style={{
-                      fontSize: "28px",
-                      fontWeight: "bold",
-                      marginBottom: "8px",
-                      color:
-                        moveAnalysis.eval > 0
-                          ? "#28a745"
+                <div className="mb-5">
+                  <div className="text-3xl font-bold mb-2 text-center">
+                    <span
+                      className={`${
+                        typeof moveAnalysis.eval === "string" &&
+                        moveAnalysis.eval.includes("#")
+                          ? "text-red-600 dark:text-red-400" // Mate scores
+                          : moveAnalysis.eval > 0
+                          ? "text-green-600 dark:text-green-400"
                           : moveAnalysis.eval < 0
-                          ? "#dc3545"
-                          : "#6c757d",
-                    }}
-                  >
-                    {moveAnalysis.eval > 0 ? "+" : ""}
-                    {moveAnalysis.eval.toFixed(2)}
+                          ? "text-red-600 dark:text-red-400"
+                          : "text-gray-600 dark:text-gray-400"
+                      }`}
+                    >
+                      {typeof moveAnalysis.eval === "string" &&
+                      moveAnalysis.eval.includes("#")
+                        ? moveAnalysis.eval // Mate notation
+                        : `${moveAnalysis.eval > 0 ? "+" : ""}${
+                            typeof moveAnalysis.eval === "number"
+                              ? moveAnalysis.eval.toFixed(2)
+                              : moveAnalysis.eval
+                          }`}
+                    </span>
                   </div>
-                  <div style={{ fontSize: "14px", color: "#666" }}>
-                    {moveAnalysis.eval > 1
-                      ? "White is winning"
-                      : moveAnalysis.eval > 0.5
-                      ? "White is better"
-                      : moveAnalysis.eval > -0.5
-                      ? "Equal position"
-                      : moveAnalysis.eval > -1
-                      ? "Black is better"
-                      : "Black is winning"}
+                  <div className="text-sm text-muted text-center">
+                    {typeof moveAnalysis.eval === "string" &&
+                    moveAnalysis.eval.includes("#")
+                      ? moveAnalysis.eval.includes("+")
+                        ? "White checkmates"
+                        : "Black checkmates"
+                      : typeof moveAnalysis.eval === "number"
+                      ? moveAnalysis.eval > 1
+                        ? "White is winning"
+                        : moveAnalysis.eval > 0.5
+                        ? "White is better"
+                        : moveAnalysis.eval > -0.5
+                        ? "Equal position"
+                        : moveAnalysis.eval > -1
+                        ? "Black is better"
+                        : "Black is winning"
+                      : "Position evaluated"}
                   </div>
                 </div>
               )}
 
+              {/* Engine Analysis Variations Section */}
               {moveAnalysis?.variations &&
                 moveAnalysis.variations.length > 0 && (
                   <div>
-                    <h4
-                      style={{
-                        fontSize: "16px",
-                        marginBottom: "12px",
-                        fontWeight: "600",
-                      }}
-                    >
+                    <h4 className="text-lg font-semibold mb-3 text-gray-900 dark:text-white">
                       Top 3 Engine Lines:
                     </h4>
                     {moveAnalysis.variations
@@ -465,76 +523,54 @@ const GameDetailPage = () => {
                       .map((variation, index) => (
                         <div
                           key={index}
-                          style={{
-                            padding: "12px 14px",
-                            backgroundColor: "#f8f9fa",
-                            border: "1px solid #e9ecef",
-                            borderRadius: "6px",
-                            margin: "8px 0",
-                            fontFamily: "monospace",
-                            fontSize: "14px",
-                            cursor: "pointer",
-                            transition: "all 0.2s ease",
-                          }}
+                          className="p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md mb-2 font-mono text-sm cursor-pointer transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-700 hover:border-blue-300 dark:hover:border-blue-600"
                           onClick={() =>
                             handleVariationExplore(variation, currentMoveIndex)
                           }
-                          onMouseEnter={(e) => {
-                            e.target.style.backgroundColor = "#e9ecef";
-                            e.target.style.borderColor = "#007bff";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.target.style.backgroundColor = "#f8f9fa";
-                            e.target.style.borderColor = "#e9ecef";
-                          }}
+                          title="Click to explore this variation"
                         >
-                          <div
-                            style={{
-                              fontWeight: "600",
-                              marginBottom: "4px",
-                              color: "#495057",
-                            }}
-                          >
+                          <div className="font-semibold text-gray-700 dark:text-gray-300 mb-1">
                             Line {index + 1}:
                           </div>
-                          <div style={{ color: "#6c757d" }}>
-                            {variation.length > 80
+                          <div className="text-gray-600 dark:text-gray-400">
+                            {variation && variation.length > 80
                               ? variation.substring(0, 80) + "..."
-                              : variation}
+                              : variation || "No moves available"}
                           </div>
                         </div>
                       ))}
                   </div>
                 )}
 
+              {/* Debug section - remove after fixing */}
+              {moveAnalysis && (
+                <div className="mt-3 p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded text-xs">
+                  <div>
+                    <strong>Analysis Info:</strong>
+                  </div>
+                  <div>Eval: {JSON.stringify(moveAnalysis.eval)}</div>
+                  <div>
+                    Variations count: {moveAnalysis.variations?.length || 0}
+                  </div>
+                  <div>
+                    Source:{" "}
+                    {moveAnalysis.explanation?.includes("Basic analysis")
+                      ? "Fallback Analysis"
+                      : "Lichess Engine"}
+                  </div>
+                </div>
+              )}
+
               {!moveAnalysis && currentMoveIndex > 0 && autoAnalysisEnabled && (
-                <div
-                  style={{
-                    textAlign: "center",
-                    color: "#666",
-                    padding: "40px 20px",
-                  }}
-                >
-                  <BarChart3
-                    size={32}
-                    style={{ opacity: 0.3, marginBottom: "10px" }}
-                  />
+                <div className="text-center text-muted py-10">
+                  <BarChart3 size={32} className="mx-auto mb-3 opacity-30" />
                   <div>Click on a move to see engine analysis</div>
                 </div>
               )}
 
               {!autoAnalysisEnabled && (
-                <div
-                  style={{
-                    textAlign: "center",
-                    color: "#666",
-                    padding: "40px 20px",
-                  }}
-                >
-                  <BarChart3
-                    size={32}
-                    style={{ opacity: 0.3, marginBottom: "10px" }}
-                  />
+                <div className="text-center text-muted py-10">
+                  <BarChart3 size={32} className="mx-auto mb-3 opacity-30" />
                   <div>Enable auto-analysis to see engine evaluations</div>
                 </div>
               )}
@@ -581,50 +617,33 @@ const GameDetailPage = () => {
               </div>
 
               {autoAIAnalysisEnabled && moveAnalysis?.explanation && (
-                <div
-                  style={{
-                    padding: "16px",
-                    backgroundColor: "#f8fbff",
-                    borderRadius: "8px",
-                    border: "1px solid #b3d9ff",
-                    lineHeight: "1.6",
-                    fontSize: "15px",
-                  }}
-                >
-                  {moveAnalysis.explanation}
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                  <div className="text-blue-800 dark:text-blue-200 leading-relaxed">
+                    {moveAnalysis.explanation}
+                  </div>
+                  {/* Show additional info if this is a fallback analysis */}
+                  {moveAnalysis.explanation &&
+                    moveAnalysis.explanation.includes("Basic analysis") && (
+                      <div className="mt-2 text-xs text-blue-600 dark:text-blue-300 italic">
+                        💡 This position uses basic evaluation as cloud analysis
+                        is unavailable
+                      </div>
+                    )}
                 </div>
               )}
 
               {autoAIAnalysisEnabled &&
                 !moveAnalysis?.explanation &&
                 currentMoveIndex > 0 && (
-                  <div
-                    style={{
-                      textAlign: "center",
-                      color: "#666",
-                      padding: "40px 20px",
-                    }}
-                  >
-                    <Brain
-                      size={32}
-                      style={{ opacity: 0.3, marginBottom: "10px" }}
-                    />
+                  <div className="text-center text-muted py-10">
+                    <Brain size={32} className="mx-auto mb-3 opacity-30" />
                     <div>Click on a move to see AI explanation</div>
                   </div>
                 )}
 
               {!autoAIAnalysisEnabled && (
-                <div
-                  style={{
-                    textAlign: "center",
-                    color: "#666",
-                    padding: "40px 20px",
-                  }}
-                >
-                  <Brain
-                    size={32}
-                    style={{ opacity: 0.3, marginBottom: "10px" }}
-                  />
+                <div className="text-center text-muted py-10">
+                  <Brain size={32} className="mx-auto mb-3 opacity-30" />
                   <div>Enable auto-analysis to see AI explanations</div>
                 </div>
               )}

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
-from typing import Optional, List, Annotated
+from typing import Optional, List, Annotated, Union
 from datetime import datetime
 from bson import ObjectId
 
@@ -128,7 +128,7 @@ class MoveAnalysisRequest(BaseModel):
     move_index: int
 
 class MoveAnalysisResponse(BaseModel):
-    eval: Optional[float]
+    eval: Optional[Union[float, str]]  # Can be float for centipawn or string for mate
     explanation: Optional[str]
     variations: List[str]
 

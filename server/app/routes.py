@@ -227,18 +227,27 @@ async def analyze_move(request: MoveAnalysisRequest, db=Depends(get_database)):
         if request.move_index < 0 or request.move_index > len(moves):
             raise HTTPException(status_code=400, detail="Invalid move index")
         
-        # Apply moves up to the requested index
+        # Apply moves up to the requested index to get the position BEFORE the move
         for i in range(request.move_index):
             board.push(moves[i])
         
         position_fen = board.fen()
         
+        # Get the played move (if any)
+        played_move = None
+        if request.move_index < len(moves):
+            played_move = moves[request.move_index].uci()
+        
         # Analyze the position
         analysis = await analyzer.analyze_single_move(
             request.game_id, 
             request.move_index, 
-            position_fen
+            position_fen,
+            played_move
         )
+        
+        # Log the analysis result for debugging
+        print(f"Analysis result for move {request.move_index}: eval={analysis.get('eval')}, variations_count={len(analysis.get('variations', []))}, variations={analysis.get('variations', [])}")
         
         # Cache the result in MongoDB
         cache_doc = {

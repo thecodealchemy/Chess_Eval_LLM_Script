@@ -17,8 +17,26 @@ def main():
     print("  • GET  /health - Health check")
     print("=" * 50)
     
-    # Set environment variables if .env doesn't exist
-    if not Path(".env").exists():
+    # Ensure we're in the server directory
+    server_dir = Path(__file__).parent.absolute()
+    os.chdir(server_dir)
+    print(f"Working directory: {server_dir}")
+    
+    # Check for .env file and provide guidance
+    env_file = server_dir / ".env"
+    env_example = server_dir / ".env.example"
+    
+    if not env_file.exists():
+        print(f"\n⚠️  .env file not found at {env_file}")
+        if env_example.exists():
+            print(f"📝 Please copy {env_example} to {env_file} and update the values")
+        print("   Especially set your GROQ_API_KEY for AI explanations")
+        print()
+    else:
+        print(f"✓ Found .env file at {env_file}")
+    
+    # Set default environment variables if .env doesn't exist
+    if not env_file.exists():
         os.environ.setdefault("MONGODB_URL", "mongodb://localhost:27017")
     
     # Run the server
