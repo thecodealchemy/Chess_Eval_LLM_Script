@@ -112,13 +112,10 @@ const HistoryPage = () => {
             marginBottom: "10px",
           }}
         >
-          <History
-            size={28}
-            style={{ marginRight: "12px", color: "#007bff" }}
-          />
+          <History size={28} className="text-primary mr-3" />
           <div>
             <h1 style={{ margin: 0 }}>Game History</h1>
-            <p style={{ margin: "5px 0 0 0", color: "#666" }}>
+            <p className="text-muted" style={{ margin: "5px 0 0 0" }}>
               All your analyzed chess games from MongoDB storage
             </p>
           </div>
@@ -137,12 +134,12 @@ const HistoryPage = () => {
           <div style={{ flex: "1", minWidth: "200px", position: "relative" }}>
             <Search
               size={16}
+              className="text-muted"
               style={{
                 position: "absolute",
                 left: "10px",
                 top: "50%",
                 transform: "translateY(-50%)",
-                color: "#666",
               }}
             />
             <input
@@ -190,51 +187,59 @@ const HistoryPage = () => {
           >
             <div style={{ textAlign: "center" }}>
               <div
+                className="text-primary"
                 style={{
                   fontSize: "24px",
                   fontWeight: "bold",
-                  color: "#007bff",
                 }}
               >
                 {games.length}
               </div>
-              <div style={{ fontSize: "12px", color: "#666" }}>Total Games</div>
+              <div className="text-muted" style={{ fontSize: "12px" }}>
+                Total Games
+              </div>
             </div>
             <div style={{ textAlign: "center" }}>
               <div
+                className="text-success"
                 style={{
                   fontSize: "24px",
                   fontWeight: "bold",
-                  color: "#28a745",
                 }}
               >
                 {games.filter((g) => g.result === "1-0").length}
               </div>
-              <div style={{ fontSize: "12px", color: "#666" }}>White Wins</div>
+              <div className="text-muted" style={{ fontSize: "12px" }}>
+                White Wins
+              </div>
             </div>
             <div style={{ textAlign: "center" }}>
               <div
+                className="text-danger"
                 style={{
                   fontSize: "24px",
                   fontWeight: "bold",
-                  color: "#dc3545",
                 }}
               >
                 {games.filter((g) => g.result === "0-1").length}
               </div>
-              <div style={{ fontSize: "12px", color: "#666" }}>Black Wins</div>
+              <div className="text-muted" style={{ fontSize: "12px" }}>
+                Black Wins
+              </div>
             </div>
             <div style={{ textAlign: "center" }}>
               <div
+                className="text-warning"
                 style={{
                   fontSize: "24px",
                   fontWeight: "bold",
-                  color: "#ffc107",
                 }}
               >
                 {games.filter((g) => g.result === "1/2-1/2").length}
               </div>
-              <div style={{ fontSize: "12px", color: "#666" }}>Draws</div>
+              <div className="text-muted" style={{ fontSize: "12px" }}>
+                Draws
+              </div>
             </div>
           </div>
         )}
@@ -247,9 +252,9 @@ const HistoryPage = () => {
             {searchTerm || filterResult !== "all" ? (
               <>
                 <p
+                  className="text-muted"
                   style={{
                     fontSize: "18px",
-                    color: "#666",
                     marginBottom: "20px",
                   }}
                 >
@@ -268,15 +273,15 @@ const HistoryPage = () => {
             ) : (
               <>
                 <p
+                  className="text-muted"
                   style={{
                     fontSize: "18px",
-                    color: "#666",
                     marginBottom: "20px",
                   }}
                 >
                   No games in your history yet.
                 </p>
-                <Link to="/upload" className="btn btn-primary">
+                <Link to="/" className="btn btn-primary">
                   Upload Your First Game
                 </Link>
               </>
@@ -286,7 +291,8 @@ const HistoryPage = () => {
       ) : (
         <div className="card">
           <div
-            style={{ marginBottom: "15px", color: "#666", fontSize: "14px" }}
+            className="text-muted"
+            style={{ marginBottom: "15px", fontSize: "14px" }}
           >
             Showing {filteredGames.length} of {games.length} games
           </div>
@@ -352,9 +358,9 @@ const HistoryPage = () => {
 
                   {game.event && (
                     <div
+                      className="text-muted"
                       style={{
                         fontSize: "13px",
-                        color: "#666",
                         marginTop: "4px",
                       }}
                     >
@@ -372,13 +378,12 @@ const HistoryPage = () => {
                       marginBottom: "4px",
                     }}
                   >
-                    <Users
-                      size={14}
-                      style={{ marginRight: "6px", color: "#666" }}
-                    />
+                    <Users size={14} className="text-muted mr-1.5" />
                     <span style={{ fontSize: "14px" }}>
                       <strong>{game.white_player || "Unknown"}</strong>
-                      <span style={{ color: "#666", margin: "0 8px" }}>vs</span>
+                      <span className="text-muted" style={{ margin: "0 8px" }}>
+                        vs
+                      </span>
                       <strong>{game.black_player || "Unknown"}</strong>
                     </span>
                   </div>
@@ -391,9 +396,9 @@ const HistoryPage = () => {
                     justifyContent: "space-between",
                     alignItems: "center",
                     fontSize: "12px",
-                    color: "#666",
                     marginBottom: "15px",
                   }}
+                  className="text-muted"
                 >
                   <div>
                     {game.date_played && (

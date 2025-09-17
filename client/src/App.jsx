@@ -3,7 +3,6 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Navigation from "./components/Navigation";
 import HomePage from "./pages/HomePage";
-import UploadPage from "./pages/UploadPage";
 import GameListPage from "./pages/GameListPage";
 import GameDetailPage from "./pages/GameDetailPage";
 import HistoryPage from "./pages/HistoryPage";
@@ -17,7 +16,6 @@ function App() {
           <div className="container">
             <Routes>
               <Route path="/" element={<HomePage />} />
-              <Route path="/upload" element={<UploadPage />} />
               <Route path="/games" element={<GameListPage />} />
               <Route path="/history" element={<HistoryPage />} />
               <Route path="/games/:gameId" element={<GameDetailPage />} />

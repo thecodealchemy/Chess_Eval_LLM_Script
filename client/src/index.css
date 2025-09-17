@@ -41,8 +41,8 @@
     @apply bg-white rounded-xl shadow-sm border border-gray-200 p-4 dark:bg-dark-card dark:border-gray-700;
   }
   
-  .input {
-    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white;
+  .input, .form-control {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 dark:bg-gray-700 dark:border-gray-600 dark:text-white;
   }
   
   .loading {
@@ -55,6 +55,34 @@
   
   .success {
     @apply text-green-600 bg-green-50 border border-green-200 rounded-lg p-4 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400;
+  }
+  
+  .text-muted {
+    @apply text-gray-600 dark:text-gray-400;
+  }
+  
+  .text-success {
+    @apply text-green-600 dark:text-green-400;
+  }
+  
+  .text-primary {
+    @apply text-primary-600 dark:text-primary-400;
+  }
+  
+  .text-warning {
+    @apply text-yellow-600 dark:text-yellow-400;
+  }
+  
+  .text-danger {
+    @apply text-red-600 dark:text-red-400;
+  }
+  
+  .info-card {
+    @apply bg-blue-50 border border-blue-200 text-blue-800 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-400;
+  }
+  
+  .warning-card {
+    @apply bg-yellow-50 border border-yellow-200 text-yellow-800 dark:bg-yellow-900/20 dark:border-yellow-800 dark:text-yellow-400;
   }
   
   .chess-board-container {

@@ -15,11 +15,14 @@ class ChessAnalyzer:
         
         # Initialize Groq client if API key is available
         groq_api_key = os.getenv("GROQ_API_KEY")
-        if groq_api_key:
+        if groq_api_key and groq_api_key != "your_groq_api_key_here":
             try:
                 self.groq_client = Groq(api_key=groq_api_key)
+                print("✓ Groq client initialized successfully")
             except Exception as e:
                 print(f"Warning: Failed to initialize Groq client: {e}")
+        else:
+            print("Warning: GROQ_API_KEY not set or using placeholder value. AI explanations will use fallback mode.")
         
     async def analyze_pgn(self, pgn_content: str, use_llm: bool = False) -> List[dict]:
         """Analyze a complete PGN game"""
@@ -215,7 +218,8 @@ class ChessAnalyzer:
         """Get move explanation from Groq LLM"""
         if not self.groq_client:
             # Fallback to simple explanation if Groq is not available
-            return await self._get_llm_explanation(fen, move_index, evaluation)
+            fallback_explanation = await self._get_llm_explanation(fen, move_index, evaluation)
+            return f"{fallback_explanation} (Note: Set GROQ_API_KEY for AI analysis)"
         
         try:
             eval_score = evaluation.get("eval")

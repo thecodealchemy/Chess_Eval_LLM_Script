@@ -48,10 +48,7 @@ const GameListPage = () => {
   return (
     <div>
       {!isAuthenticated && (
-        <div
-          className="card"
-          style={{ backgroundColor: "#e3f2fd", borderColor: "#90caf9" }}
-        >
+        <div className="card info-card">
           <div
             style={{
               display: "flex",
@@ -59,10 +56,10 @@ const GameListPage = () => {
               marginBottom: "12px",
             }}
           >
-            <Info size={20} style={{ marginRight: "8px", color: "#1565c0" }} />
-            <h3 style={{ margin: 0, color: "#1565c0" }}>Viewing All Games</h3>
+            <Info size={20} className="mr-2" />
+            <h3 style={{ margin: 0 }}>Viewing All Games</h3>
           </div>
-          <p style={{ margin: "0 0 12px 0", color: "#1976d2" }}>
+          <p style={{ margin: "0 0 12px 0" }}>
             You're viewing all games from all users. Sign in to see only your
             games and manage them.
           </p>
@@ -86,7 +83,7 @@ const GameListPage = () => {
           }}
         >
           <h1>{isAuthenticated ? "Your Chess Games" : "All Chess Games"}</h1>
-          <Link to="/upload" className="btn btn-primary">
+          <Link to="/" className="btn btn-primary">
             Upload New Game
           </Link>
         </div>
@@ -101,11 +98,12 @@ const GameListPage = () => {
         <div className="card">
           <div style={{ textAlign: "center", padding: "40px" }}>
             <p
-              style={{ fontSize: "18px", color: "#666", marginBottom: "20px" }}
+              className="text-muted"
+              style={{ fontSize: "18px", marginBottom: "20px" }}
             >
               No games uploaded yet.
             </p>
-            <Link to="/upload" className="btn btn-primary">
+            <Link to="/" className="btn btn-primary">
               Upload Your First Game
             </Link>
           </div>
@@ -130,7 +128,7 @@ const GameListPage = () => {
                   <td>
                     <strong>{game.title}</strong>
                     {game.event && (
-                      <div style={{ fontSize: "12px", color: "#666" }}>
+                      <div className="text-muted" style={{ fontSize: "12px" }}>
                         {game.event}
                       </div>
                     )}
